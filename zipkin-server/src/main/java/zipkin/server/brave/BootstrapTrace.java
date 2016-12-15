@@ -28,22 +28,29 @@ public enum BootstrapTrace {
   private final Map<String, Long> annotations = new LinkedHashMap<>();
   private final long timestamp = System.currentTimeMillis() * 1000;
   private final long startTick = System.nanoTime();
+  private boolean trace = true;
 
   public void record(ApplicationEvent event) {
-    annotations.put(event.getClass().getSimpleName().replace("Event", ""), timestamp + microsSinceInit());
-    // record duration and flush the trace if we're done
-    if (event instanceof ApplicationReadyEvent) {
-      long duration = microsSinceInit(); // get duration now, as below logic might skew things.
-      ApplicationReadyEvent ready = (ApplicationReadyEvent) event;
-      try {
-        LocalTracer tracer = ready.getApplicationContext().getBeanFactory()
-            .getBean(Brave.class).localTracer();
+    if (trace) {
+      annotations.put(event.getClass().getSimpleName().replace("Event", ""),
+          timestamp + microsSinceInit());
+      // record duration and flush the trace if we're done
+      if (event instanceof ApplicationReadyEvent) {
+        long duration = microsSinceInit(); // get duration now, as below logic might skew things.
+        ApplicationReadyEvent ready = (ApplicationReadyEvent) event;
+        try {
+          LocalTracer tracer = ready.getApplicationContext().getBeanFactory()
+              .getBean(Brave.class).localTracer();
 
-        tracer.startNewSpan("spring-boot", "bootstrap", timestamp);
-        annotations.forEach(tracer::submitAnnotation);
-        tracer.finishSpan(duration);
-      } catch (NoSuchBeanDefinitionException ignored) {
-        // Brave is optional
+          tracer.startNewSpan("spring-boot", "bootstrap", timestamp);
+          annotations.forEach(tracer::submitAnnotation);
+          tracer.finishSpan(duration);
+        } catch (NoSuchBeanDefinitionException ignored) {
+          // Brave is optional
+        } finally {
+          annotations.clear();
+          trace = false;
+        }
       }
     }
   }
